@@ -221,6 +221,31 @@ mark { background: none; color: var(--accent); font-weight: 700; }
 .q.ng .q-ex strong { color: var(--ng); }
 .q-ex p { margin: 4px 0 0; }
 
+.note-s { font-size: 13px; color: var(--muted); }
+
+/* drill(四肢演習) */
+.drill-setup { align-items: center; }
+.drill-setup select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.stmts { list-style: none; padding: 0; margin: 0 0 12px; }
+.stmts li { border-top: 1px dashed var(--line); padding: 8px 0; }
+.st-row { display: flex; gap: 10px; align-items: flex-start; }
+.st-l { font-weight: 800; min-width: 1.4em; }
+.st-t { flex: 1; }
+.jm { display: flex; gap: 4px; flex-shrink: 0; }
+.jm button {
+  width: 34px; height: 30px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--bg); font-weight: 700;
+}
+.jm button.picked { background: var(--memo-bg); border-color: var(--kenri); }
+.jm button:disabled { cursor: default; }
+.st-ex { margin: 6px 0 0 calc(1.4em + 10px); padding: 6px 10px; border-radius: 6px; font-size: 14px; background: var(--bg); }
+.st-ex.ok { background: var(--ok-bg); }
+.st-ex.ng { background: var(--ng-bg); }
+.st-ex p { margin: 2px 0 0; }
+.choices { flex-wrap: wrap; }
+.choices button { min-width: 110px; }
+.choices button.right { opacity: 1; border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+
 .pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 32px; }
 .empty { text-align: center; color: var(--muted); padding: 48px 0; }
 

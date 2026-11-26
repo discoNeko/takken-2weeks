@@ -74,6 +74,23 @@
   }
   function weakIds() { return Object.keys(S.weak).filter(function (id) { return Q[id]; }); }
 
+  // 苦手リスト: S.weak[id] = { n: 日をまたいだ連続正解数, d: 最後に正解した日 }。
+  // 解説を読んだ直後の正解では卒業させず、別の日に2回続けて正解したら外す。
+  // 旧バージョンの値(1)は n=0 として扱う。
+  var GRADUATE = 2;
+  function weakEntry(id) {
+    var w = S.weak[id];
+    return w && typeof w === 'object' ? w : { n: 0, d: '' };
+  }
+  function markWrong(id) { S.weak[id] = { n: 0, d: '' }; }
+  function markRight(id) {
+    if (!S.weak[id]) return;
+    var w = weakEntry(id), today = iso(new Date());
+    if (w.d === today) return; // 同じ日の正解は数えない
+    w = { n: w.n + 1, d: today };
+    if (w.n >= GRADUATE) delete S.weak[id]; else S.weak[id] = w;
+  }
+
   // ---------- quiz ----------
   // view: 現在表示中の問題リスト。picks[id] は true(○を選択) / false(×を選択)
   var view = null;
@@ -85,7 +102,8 @@
     var correct = answered && picked === q.a;
     return '<article class="q' + (answered ? (correct ? ' ok' : ' ng') : '') + '" data-q="' + id + '" data-n="' + n + '">' +
       '<div class="q-head"><span class="q-no">Q' + n + '</span>' + chip(q.cat) +
-      (showDay ? '<a href="#/day/' + q.day + '">Day ' + q.day + '</a>' : '') + '</div>' +
+      (showDay ? '<a href="#/day/' + q.day + '">Day ' + q.day + '</a>' : '') +
+      (view.name === 'review' && S.weak[id] ? '<span>卒業まで ' + (GRADUATE - weakEntry(id).n) + ' 日</span>' : '') + '</div>' +
       '<p class="q-text">' + q.q + '</p>' +
       '<div class="q-btns">' +
       '<button type="button" data-pick="1"' + (answered ? ' disabled' : '') + (picked === true ? ' class="picked"' : '') + '>○ 正しい</button>' +
@@ -121,11 +139,12 @@
     }).join('');
     var all = tally(view.ids);
     var rate = all.ok / all.total;
-    var msg = rate >= 0.76 ? '合格圏です。間違えた問題だけ潰して本番へ。'
-      : rate >= 0.68 ? 'ボーダー付近。苦手リストを空にしてからもう一度。'
-        : 'まだ足りません。得点源の宅建業法から復習を。';
+    // ○×の正答率は本試験(四肢択一・個数問題)の得点に換算できないので、合否の目安は出さない
+    var msg = rate >= 0.9 ? '基礎の○×は固まっています。次は「四肢演習」と公式の過去問で、本試験形式の得点を確かめましょう。'
+      : '○×で9割に届くまでは、苦手リストと講義の読み直しを優先しましょう。';
     return '<div style="flex-basis:100%"><div class="scroll"><table><tbody>' + rows + '</tbody></table></div>' +
-      '<p><b>' + Math.round(rate * 100) + '%</b>(50問換算で約' + Math.round(rate * 50) + '点)— ' + msg + '</p></div>';
+      '<p>○×正答率 <b>' + Math.round(rate * 100) + '%</b> — ' + msg + '</p>' +
+      '<p class="note-s">○×で8割正解できても、4肢すべてを正しく判定する個数問題では正答率が4割前後まで落ちます(0.8の4乗≒0.41)。この結果を合格可能性の目安にはしないでください。 <a href="#/drill">四肢演習へ →</a></p></div>';
   }
 
   function quizHTML(showDay) {
@@ -139,7 +158,7 @@
     var correct = pick === Q[id].a;
     view.picks[id] = pick;
     S.ans[id] = correct ? 1 : 0;
-    if (correct) delete S.weak[id]; else S.weak[id] = 1;
+    if (correct) markRight(id); else markWrong(id);
     save();
     cardEl.outerHTML = card(id, +cardEl.getAttribute('data-n'), view.showDay);
     document.getElementById('score').innerHTML = scoreHTML();
@@ -205,7 +224,14 @@
       '<ol><li>その日のページを上から読む(読み終えた節にチェック)。</li>' +
       '<li>すぐ下の一問一答を解く。間違えた問題は自動で「苦手」に入る。</li>' +
       '<li>寝る前に「苦手」を空にする。翌朝は「数字暗記」を数字を隠して5分。</li>' +
-      '<li>Day 14 と前日は「模試」を回し、過去問(直近3年分)を時間を計って解く。</li></ol>' +
+      '<li>Day 14 と前日は「模試」で○×を総点検し、「四肢演習」で本試験形式に慣れる。</li></ol>' +
+
+      '<h2>14日のあと:過去問で得点力をつける</h2>' +
+      '<p>この14日間は全範囲を一周して土台を作る期間です。○×で覚えた知識を本試験の点数にするには、四肢択一の過去問演習が欠かせません。令和8年度の本試験は個数問題10問・組合せ問題5問で、選択肢を1つずつ確実に判定する力が問われました。</p>' +
+      '<ol><li><a href="https://www.retio.or.jp/exam/past_ques_ans/other/" target="_blank" rel="noopener">公式の過去問(不動産適正取引推進機構)</a>を1年分ずつ、<b>2時間</b>を計って解く。</li>' +
+      '<li>採点したら、間違えた肢だけでなく<b>正解した問題の他の肢</b>も、どこが誤りか言えるか確認する。</li>' +
+      '<li>言えなかった論点は該当 Day の講義に戻り、一問一答と四肢演習で固め直す。</li>' +
+      '<li>目標は直近の年度で<b>38点</b>以上(合格点は令和7・8年度とも33点)。</li></ol>' +
 
       '<p style="margin-top:32px"><button type="button" class="btn ghost" id="resetAll">学習記録をすべて消す</button></p>';
   }
@@ -243,7 +269,7 @@
   function viewReview() {
     view = { name: 'review', ids: shuffle(weakIds()), picks: {}, showDay: true };
     app.innerHTML = '<h1>苦手リスト</h1>' +
-      '<p class="lead">間違えた問題だけが残ります。正解すると次に開いたとき消えます。</p>' +
+      '<p class="lead">間違えた問題が残ります。<b>日をまたいで' + GRADUATE + '回続けて正解</b>すると外れます(同じ日の2回目以降の正解は数えません。間違えるとやり直し)。</p>' +
       (view.ids.length ? quizHTML(true) + '<p><a class="btn ghost" href="#/review" id="reloadReview">残りをもう一周</a></p>'
         : '<p class="empty">苦手リストは空です。この調子で次の Day へ。</p>');
   }
@@ -261,9 +287,178 @@
     if (!exam) newExam();
     view = { name: 'exam', ids: exam.ids, picks: exam.picks, showDay: true };
     app.innerHTML = '<h1>ランダム模試(' + exam.ids.length + '問)</h1>' +
-      '<p class="lead">本試験と同じ科目配分(業法20・権利14・法令8・税その他8)で全問題から出題します。一問一答形式なので、目安は25分。</p>' +
+      '<p class="lead">本試験と同じ科目配分(業法20・権利14・法令8・税その他8)で全問題から出題する○×の総点検です。目安は25分。本試験形式の練習は <a href="#/drill">四肢演習</a> で。</p>' +
       quizHTML(true) +
       '<p><button type="button" class="btn" id="newExam">問題を入れ替えてもう一度</button></p>';
+  }
+
+  // ---------- 四肢演習 ----------
+  // 既存の○×問題を4つ組み合わせ、本試験の形式(個数・組合せ・正しい/誤っているもの)で出題する。
+  var KANA = ['ア', 'イ', 'ウ', 'エ'];
+  var KOSU = ['一つ', '二つ', '三つ', '四つ'];
+  var PAIRS = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+  var DRILL_TYPES = [ // w: 出題の重み。本試験より個数・組合せを多めにして慣れさせる
+    { key: 'kosu', w: 35, label: '個数問題', stem: '次の記述のうち、正しいものはいくつあるか。' },
+    { key: 'kumi', w: 15, label: '組合せ問題', stem: '次の記述のうち、正しいものの組合せはどれか。' },
+    { key: 'sei', w: 25, label: '正しいもの', stem: '次の記述のうち、正しいものはどれか。' },
+    { key: 'go', w: 25, label: '誤っているもの', stem: '次の記述のうち、誤っているものはどれか。' }
+  ];
+  var drill = null;
+
+  function pickType() {
+    var r = Math.random() * 100, acc = 0;
+    for (var i = 0; i < DRILL_TYPES.length; i++) { acc += DRILL_TYPES[i].w; if (r < acc) return DRILL_TYPES[i]; }
+    return DRILL_TYPES[0];
+  }
+  function randInt(n) { return Math.floor(Math.random() * n); }
+
+  // 科目ごとに○/×の山を作り、上から引く。山が尽きたら切り直す(1問の中では同じ肢を使わない)
+  function makeDealer(cat) {
+    var all = Object.keys(Q).filter(function (id) { return Q[id].cat === cat; });
+    var src = { T: all.filter(function (id) { return Q[id].a; }), F: all.filter(function (id) { return !Q[id].a; }) };
+    var deck = { T: [], F: [] };
+    return function (truth, used) {
+      var k = truth ? 'T' : 'F';
+      for (var tries = 0; tries < 2; tries++) {
+        for (var i = 0; i < deck[k].length; i++) {
+          if (used.indexOf(deck[k][i]) === -1) return deck[k].splice(i, 1)[0];
+        }
+        deck[k] = shuffle(src[k]);
+      }
+      return null;
+    };
+  }
+
+  function makeProblem(cat, deal) {
+    var type = pickType();
+    var nTrue = type.key === 'kosu' ? 1 + randInt(4) : type.key === 'kumi' ? 2 : type.key === 'sei' ? 1 : 3;
+    var truths = shuffle([0, 1, 2, 3].map(function (i) { return i < nTrue; }));
+    var ids = [];
+    for (var i = 0; i < 4; i++) {
+      var id = deal(truths[i], ids);
+      if (!id) return null;
+      ids.push(id);
+    }
+    var choices, answer;
+    if (type.key === 'kosu') {
+      choices = KOSU.slice(); answer = nTrue - 1;
+    } else if (type.key === 'kumi') {
+      var right = [0, 1, 2, 3].filter(function (i) { return truths[i]; });
+      var correct = PAIRS.filter(function (p) { return p[0] === right[0] && p[1] === right[1]; })[0];
+      var others = shuffle(PAIRS.filter(function (p) { return p !== correct; })).slice(0, 3);
+      var four = others.concat([correct]).sort(function (a, b) { return PAIRS.indexOf(a) - PAIRS.indexOf(b); });
+      choices = four.map(function (p) { return KANA[p[0]] + '、' + KANA[p[1]]; });
+      answer = four.indexOf(correct);
+    } else {
+      choices = ['1', '2', '3', '4'];
+      answer = truths.indexOf(type.key === 'sei');
+    }
+    return { cat: cat, type: type.key, ids: ids, choices: choices, answer: answer, pick: null, memo: {} };
+  }
+
+  function newDrill(cat, size) {
+    var plan = []; // 出題する科目の並び
+    if (size === 50) {
+      EXAM_CATS.forEach(function (c) { for (var i = 0; i < CATS[c].q; i++) plan.push(c); });
+    } else {
+      for (var i = 0; i < size; i++) plan.push(cat === 'all' ? EXAM_CATS[randInt(EXAM_CATS.length)] : cat);
+      if (cat === 'all') plan.sort(function (a, b) { return EXAM_CATS.indexOf(a) - EXAM_CATS.indexOf(b); });
+    }
+    var dealers = {};
+    var probs = plan.map(function (c) {
+      if (!dealers[c]) dealers[c] = makeDealer(c);
+      return makeProblem(c, dealers[c]);
+    }).filter(Boolean);
+    drill = { cat: cat, size: size, probs: probs };
+  }
+
+  function drillTypeOf(p) { return DRILL_TYPES.filter(function (t) { return t.key === p.type; })[0]; }
+  function stmtLabel(p, k) { return p.type === 'sei' || p.type === 'go' ? String(k + 1) : KANA[k]; }
+
+  function drillCard(p, n) {
+    var done = p.pick !== null;
+    var ok = done && p.pick === p.answer;
+    var stmts = p.ids.map(function (id, k) {
+      var q = Q[id], m = p.memo[k];
+      var memoBtns = '<span class="jm">' +
+        '<button type="button" data-memo="' + k + '" data-v="1"' + (m === true ? ' class="picked"' : '') + (done ? ' disabled' : '') + ' aria-label="○と判断">○</button>' +
+        '<button type="button" data-memo="' + k + '" data-v="0"' + (m === false ? ' class="picked"' : '') + (done ? ' disabled' : '') + ' aria-label="×と判断">×</button></span>';
+      var res = done ? '<div class="st-ex' + (m === undefined ? '' : m === q.a ? ' ok' : ' ng') + '"><b>' + (q.a ? '○ 正しい' : '× 誤り') + '</b>' +
+        (m === undefined ? '' : m === q.a ? '(判断どおり)' : '(判断と違う → 苦手リストへ)') +
+        ' <a href="#/day/' + q.day + '">Day ' + q.day + '</a><p>' + q.ex + '</p></div>' : '';
+      return '<li><div class="st-row"><span class="st-l">' + stmtLabel(p, k) + '</span><span class="st-t">' + q.q + '</span>' + memoBtns + '</div>' + res + '</li>';
+    }).join('');
+    var choices = p.choices.map(function (c, j) {
+      var cls = done && j === p.answer ? ' class="right"' : done && j === p.pick ? ' class="picked"' : '';
+      return '<button type="button" data-choice="' + j + '"' + cls + (done ? ' disabled' : '') + '>' + (j + 1) + '. ' + c + '</button>';
+    }).join('');
+    return '<article class="q dq' + (done ? (ok ? ' ok' : ' ng') : '') + '" data-p="' + (n - 1) + '">' +
+      '<div class="q-head"><span class="q-no">問' + n + '</span>' + chip(p.cat) + '<span>' + drillTypeOf(p).label + '</span></div>' +
+      '<p class="q-text">' + drillTypeOf(p).stem + '</p>' +
+      '<ol class="stmts">' + stmts + '</ol>' +
+      '<div class="q-btns choices">' + choices + '</div>' +
+      (done ? '<div class="q-ex"><strong>' + (ok ? '正解' : '不正解') + '(正解は ' + (p.answer + 1) + ')</strong></div>' : '') +
+      '</article>';
+  }
+
+  function drillScoreHTML() {
+    var done = 0, ok = 0;
+    drill.probs.forEach(function (p) { if (p.pick !== null) { done++; if (p.pick === p.answer) ok++; } });
+    var h = '<span>解答 <b>' + done + '/' + drill.probs.length + '</b></span><span>正解 <b>' + ok + '</b></span>';
+    if (done) h += '<span>正答率 <b>' + Math.round(ok / done * 100) + '%</b></span>';
+    if (done === drill.probs.length) {
+      var rows = EXAM_CATS.map(function (c) {
+        var ps = drill.probs.filter(function (p) { return p.cat === c; });
+        if (!ps.length) return '';
+        var k = ps.filter(function (p) { return p.pick === p.answer; }).length;
+        return '<tr><th>' + CATS[c].name + '</th><td>' + k + ' / ' + ps.length + '</td></tr>';
+      }).join('');
+      h += '<div style="flex-basis:100%"><div class="scroll"><table><tbody>' + rows + '</tbody></table></div>' +
+        (drill.size === 50 ? '<p><b>' + ok + ' / 50点</b>(令和7・8年度の合格点は33点)。肢は一問一答で見たことがある文なので、本試験より易しめに出ます。38点以上を安定して取れたら、公式の過去問で確かめましょう。</p>'
+          : '<p>判断が外れた肢は苦手リストに入っています。</p>') + '</div>';
+    }
+    return h;
+  }
+
+  function viewDrill() {
+    view = null;
+    var catOpts = '<option value="all">全科目ミックス</option>' + EXAM_CATS.map(function (c) {
+      return '<option value="' + c + '"' + (drill && drill.cat === c ? ' selected' : '') + '>' + CATS[c].name + '</option>';
+    }).join('');
+    var setup = '<div class="tools drill-setup">' +
+      '<label>科目 <select id="drillCat">' + catOpts + '</select></label>' +
+      '<label>問題数 <select id="drillSize"><option value="10">10問</option><option value="20">20問</option>' +
+      '<option value="50"' + (drill && drill.size === 50 ? ' selected' : '') + '>本試験配分 50問(科目指定は無視)</option></select></label>' +
+      '<button type="button" class="btn" id="drillStart">' + (drill ? '新しいセットで始める' : '始める') + '</button></div>';
+    app.innerHTML = '<h1>四肢演習</h1>' +
+      '<p class="lead">一問一答の文を4つ組み合わせ、本試験と同じ形式(個数・組合せ・正しいもの・誤っているもの)で出題します。' +
+      '各肢の右の ○ × で自分の判断をメモしてから答えると、判断が外れた肢が苦手リストに入ります。50問なら目安は2時間です。</p>' +
+      setup +
+      (drill ? '<div class="score" id="score">' + drillScoreHTML() + '</div>' +
+        drill.probs.map(function (p, i) { return drillCard(p, i + 1); }).join('') : '');
+  }
+
+  function drillMemo(btn) {
+    var el = btn.closest('.dq'), p = drill.probs[+el.getAttribute('data-p')];
+    if (p.pick !== null) return;
+    var k = +btn.getAttribute('data-memo'), v = btn.getAttribute('data-v') === '1';
+    if (p.memo[k] === v) delete p.memo[k]; else p.memo[k] = v; // 同じボタンをもう一度押すと取り消し
+    el.outerHTML = drillCard(p, +el.getAttribute('data-p') + 1);
+  }
+
+  function drillAnswer(btn) {
+    var el = btn.closest('.dq'), i = +el.getAttribute('data-p'), p = drill.probs[i];
+    if (p.pick !== null) return;
+    p.pick = +btn.getAttribute('data-choice');
+    p.ids.forEach(function (id, k) {
+      var m = p.memo[k];
+      if (m === undefined) return;
+      if (m === Q[id].a) markRight(id); else markWrong(id);
+    });
+    save();
+    el.outerHTML = drillCard(p, i + 1);
+    document.getElementById('score').innerHTML = drillScoreHTML();
+    updateNav();
   }
 
   function viewNumbers() {
@@ -291,6 +486,7 @@
     else if (parts[0] === 'numbers') { name = 'numbers'; viewNumbers(); }
     else if (parts[0] === 'review') { name = 'review'; viewReview(); }
     else if (parts[0] === 'exam') { name = 'exam'; viewExam(); }
+    else if (parts[0] === 'drill') { name = 'drill'; viewDrill(); }
     else viewHome();
     app.className = '';
     Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) {
@@ -312,6 +508,15 @@
     var t = e.target;
     var pickBtn = t.closest('[data-pick]');
     if (pickBtn && view) { answer(pickBtn.closest('.q'), pickBtn.getAttribute('data-pick') === '1'); return; }
+
+    var memoBtn = t.closest('[data-memo]');
+    if (memoBtn && drill) { drillMemo(memoBtn); return; }
+    var choiceBtn = t.closest('[data-choice]');
+    if (choiceBtn && drill) { drillAnswer(choiceBtn); return; }
+    if (t.id === 'drillStart') {
+      newDrill(document.getElementById('drillCat').value, +document.getElementById('drillSize').value);
+      viewDrill(); return;
+    }
 
     if (t.classList.contains('num-v')) { t.classList.toggle('show'); return; }
 
